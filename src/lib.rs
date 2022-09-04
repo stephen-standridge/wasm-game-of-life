@@ -1,3 +1,5 @@
+mod utils;
+
 extern crate fixedbitset;
 use fixedbitset::FixedBitSet;
 
@@ -17,6 +19,16 @@ pub enum Cell {
     Dead = 0,
     Alive = 1,
 }
+
+
+// extern crate web_sys;
+
+// // A macro to provide `println!(..)`-style syntax for `console.log` logging.
+// macro_rules! log {
+//     ( $( $t:tt )* ) => {
+//         web_sys::console::log_1(&format!( $( $t )* ).into());
+//     }
+// }
 
 #[wasm_bindgen]
 pub struct Universe {
@@ -47,14 +59,52 @@ impl Universe {
         count
     }
 
-    fn spaceship(&mut self, x: u32,y: u32) -> bool {
-        match(x, y) {
-            (x, 10) if x < 5 => return true,
-            (x, 11) if x == 0 || x == 5 => return true,
-            (0, 12) => return true,
-            (1, 13) => return true,
-            (5, 13) => return true,
+    fn spaceship(&mut self, x: u32, y: u32, target_x: u32, target_y: u32) -> bool {
+        let offset_x = x + 3 - target_x; //range 0 -> 5
+        let offset_y = y + 2 - target_y; //range 0 -> 3
+        match(offset_x, offset_y) {
+            (x, 0) if x < 5 => return true,
+            (x, 1) if x == 0 || x == 5 => return true,
+            (0, 2) => return true,
+            (1, 3) => return true,
+            (5, 3) => return true,
             (_, _) => return false,
+        }
+    }
+
+    fn pulsar(&mut self, x: u32, y: u32, target_x: u32, target_y: u32) -> bool {
+        let offset_x = x + 6 - target_x; //range 0 -> 2
+        let offset_y = y + 6 - target_y; //range 0 -> 2
+        match(offset_x, offset_y) {
+            (0,y) if y >1 && y <5 => return true,
+            (0,y) if y >7 && y <11 => return true,
+            (5,y) if y >1 && y <5 => return true,
+            (5,y) if y >7 && y <11 => return true,
+            (7,y) if y >1 && y <5 => return true,
+            (7,y) if y >7 && y <11 => return true,
+            (12,y) if y >1 && y <5 => return true,
+            (12,y) if y >7 && y <11 => return true,
+
+            (x,0) if x >1 && x <5 => return true,
+            (x,0) if x >7 && x <11 => return true,
+            (x,5) if x >1 && x <5 => return true,
+            (x,5) if x >7 && x <11 => return true,
+            (x,7) if x >1 && x <5 => return true,
+            (x,7) if x >7 && x <11 => return true,
+            (x,12) if x >1 && x <5 => return true,
+            (x,12) if x >7 && x <11 => return true,  
+            (_,_) => return false,          
+        }
+    }
+
+    fn glider(&mut self, x: u32, y: u32, target_x: u32, target_y: u32) -> bool {
+        let offset_x = x + 1 - target_x; //range 0 -> 12
+        let offset_y = y + 1 - target_y; //range 0 -> 12
+        match(offset_x, offset_y) {
+            (x,2) if x < 3 => return true,
+            (2,1) => return true,
+            (1,0) => return true,
+            (_,_) => return false,
         }
     }
 
@@ -80,12 +130,13 @@ impl Universe {
 #[wasm_bindgen]
 impl Universe {
     pub fn new() -> Universe {
+        utils::set_panic_hook();
         let width = 64;
         let height = 64;
         let size = (width*height) as usize;
         let mut cells = FixedBitSet::with_capacity(size);
         for i in 0..size {
-            cells.set(i, i % 2 == 0 || i % 7 == 0);
+          cells.set(i, i % 2 == 0 || i % 7 == 0);
         }
 
         Universe {
@@ -124,17 +175,68 @@ impl Universe {
         self.cells = next;
     }
 
-    pub fn create_spaceship(&mut self) {
+    pub fn create_empty_board(&mut self) {
+        let mut next = self.cells.clone();
+        let size = (self.width*self.height) as usize;
+
+        for i in 0..size {
+            next.set(i, false);
+        }
+
+        self.cells = next;
+    }
+
+    pub fn create_spaceship(&mut self, y: u32, x: u32) {
         let mut next = self.cells.clone();
         for row in 0..self.height {
             for col in 0..self.width {
                 let idx = self.get_index(row, col);
                 let cell = self.cells[idx];
 
-                let is_spaceship: bool = self.spaceship(col, row);
+                let is_spaceship: bool = self.spaceship(col, row, x, y);
                 next.set(idx, match(cell, is_spaceship) {
-                    (_, true) => true,
-                    (_, false) => false,
+                    (true, true) => true,
+                    (true, false) => true,
+                    (false, false) => false,
+                    (false, true) => true,
+                });
+            }
+        }
+        self.cells = next;
+    }
+
+    pub fn create_glider(&mut self, y: u32, x: u32) {
+        let mut next = self.cells.clone();
+        for row in 0..self.height {
+            for col in 0..self.width {
+                let idx = self.get_index(row, col);
+                let cell = self.cells[idx];
+
+                let is_glider: bool = self.glider(col, row, x, y);
+                next.set(idx, match(cell, is_glider) {
+                    (true, true) => true,
+                    (true, false) => true,
+                    (false, false) => false,
+                    (false, true) => true,
+                });
+            }
+        }
+        self.cells = next;
+    }
+
+    pub fn create_pulsar(&mut self, y: u32, x: u32) {
+        let mut next = self.cells.clone();
+        for row in 0..self.height {
+            for col in 0..self.width {
+                let idx = self.get_index(row, col);
+                let cell = self.cells[idx];
+
+                let is_pulsar: bool = self.pulsar(col, row, x, y);
+                next.set(idx, match(cell, is_pulsar) {
+                    (true, true) => true,
+                    (true, false) => true,
+                    (false, false) => false,
+                    (false, true) => true,
                 });
             }
         }
@@ -149,6 +251,13 @@ impl Universe {
                 let idx = self.get_index(row, col);
                 let cell = self.cells[idx];
                 let live_neighbors = self.live_neighbor_count(row, col);
+                // log!(
+                //     "cell[{}, {}] is initially {:?} and has {} live neighbors",
+                //     row,
+                //     col,
+                //     cell,
+                //     live_neighbors
+                // );
 
                 next.set(idx, match(cell, live_neighbors) {
                     // Rule 1: Any live cell with fewer than two live neighbours
@@ -166,6 +275,9 @@ impl Universe {
                     (otherwise, _) => otherwise,
                     // All other cells remain in the same state.                    
                 });
+                
+                // log!("    it becomes {:?}", &next[idx]);
+
             }
         }
         self.cells = next;
@@ -185,6 +297,15 @@ impl Universe {
 
     pub fn cells(&self) -> *const u32 {
         self.cells.as_slice().as_ptr()
+    }
+
+    pub fn toggle_cell(&mut self, row: u32, column: u32) {
+        let idx = self.get_index(row, column);
+        let new_val = match self.cells[idx] {
+            true => false,
+            false => true,
+        };
+        self.cells.set(idx, new_val);
     }
 }
 
